@@ -18,6 +18,9 @@ connectDB();
 const taskRoutes = require('./routes/tasks.routes'); 
 app.use('/api', taskRoutes);
 
+const authRoutes = require('./routes/auth.routes')
+app.use('/api', authRoutes);
+
 app.get('/', (req, res) => { 
     res.send('¡Servidor funcionando!'); 
 });
