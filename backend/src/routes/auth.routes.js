@@ -4,7 +4,11 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/user.model'); 
  
 const router = express.Router(); 
-const SECRET_KEY = 'mi_secreto'; // Cambiar por una clave segura 
+
+// auth.routes.js
+// FIX: Get SECRET_KEY from environment variables
+const SECRET_KEY = process.env.JWT_SECRET || 'mi_secreto_fallback'; // Must match middleware logic
+
  
 // Registro de usuario 
 router.post('/register', async (req, res) => { 
