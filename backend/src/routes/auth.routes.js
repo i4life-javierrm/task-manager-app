@@ -14,15 +14,19 @@ const SECRET_KEY = process.env.JWT_SECRET || 'mi_secreto_fallback'; // Must matc
 router.post('/register', async (req, res) => { 
   try { 
     const { username, password } = req.body; 
-    //const username = "aaa"
-    //const password = "aaa"
     const user = new User({ username, password }); 
     await user.save(); 
     res.status(201).json({ message: 'Usuario creado' }); 
   } catch (error) { 
-    res.status(400).json({ error: 'El usuario ya existe' }); 
+    // Si el error es una violación de unicidad (usuario duplicado)
+    if (error.code === 11000) { 
+      return res.status(409).json({ error: 'El usuario ya existe' }); // 409 Conflict es más apropiado para duplicados
+    } 
+    
+    // Para otros errores de validación (ej. campo requerido faltante o fallo de bcrypt)
+    res.status(400).json({ error: 'Error de validación: ' + error.message }); 
   } 
-}); 
+});
  
 // Inicio de sesión 
 router.post('/login', async (req, res) => { 

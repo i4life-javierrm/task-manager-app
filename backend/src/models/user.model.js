@@ -7,7 +7,7 @@ password: { type: String, required: true }
 // Hashear la contraseña antes de guardar 
 UserSchema.pre('save', async function (next) { 
 if (!this.isModified('password')) return next();  
-this.password = await bcrypt.hash(this.password, process.env.SALT_ROUNDS); 
+this.password = await bcrypt.hash(this.password, parseInt(process.env.SALT_ROUNDS)); 
 next(); 
 }); 
 module.exports = mongoose.model('User', UserSchema);
