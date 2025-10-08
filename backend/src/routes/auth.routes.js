@@ -10,6 +10,8 @@ const SECRET_KEY = 'mi_secreto'; // Cambiar por una clave segura
 router.post('/register', async (req, res) => { 
   try { 
     const { username, password } = req.body; 
+    //const username = "aaa"
+    //const password = "aaa"
     const user = new User({ username, password }); 
     await user.save(); 
     res.status(201).json({ message: 'Usuario creado' }); 
