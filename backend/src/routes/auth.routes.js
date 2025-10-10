@@ -1,19 +1,74 @@
-const express = require('express'); 
-const bcrypt = require('bcryptjs'); 
-const jwt = require('jsonwebtoken'); 
-const User = require('../models/user.model'); 
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const User = require('../models/user.model');
  
-const router = express.Router(); 
+const router = express.Router();
 
 // auth.routes.js
 // FIX: Get SECRET_KEY from environment variables
 const SECRET_KEY = process.env.JWT_SECRET || 'mi_secreto_fallback'; // Must match middleware logic
 
  
+// Function to validate the password against the specified criteria
+const validatePassword = (password) => {
+    // Trivial array of special characters
+    const specialChars = '!@#$%^&*()_+[]{}|;:,.<>?';
+
+    // 1. At least 8 characters
+    if (password.length < 8) {
+        return 'La contraseña debe tener al menos 8 caracteres.';
+    }
+    
+    // 2. At least 1 uppercase letter
+    if (!/[A-Z]/.test(password)) {
+        return 'La contraseña debe contener al menos 1 letra mayúscula.';
+    }
+
+    // 3. At least 1 lowercase letter
+    if (!/[a-z]/.test(password)) {
+        return 'La contraseña debe contener al menos 1 letra minúscula.';
+    }
+
+    // 4. At least 1 number
+    if (!/\d/.test(password)) {
+        return 'La contraseña debe contener al menos 1 número.';
+    }
+
+    // 5. At least 1 special character
+    // We escape the special characters for use within a RegExp
+    const specialCharRegex = new RegExp(`[${specialChars.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}]`);
+    if (!specialCharRegex.test(password)) {
+        // You can list the allowed special characters for better user feedback
+        return `La contraseña debe contener al menos 1 caracter especial. Ej: ${specialChars}`;
+    }
+
+    // Password is valid
+    return null; 
+};
+
+
 // Registro de usuario 
 router.post('/register', async (req, res) => { 
   try { 
     const { username, password } = req.body; 
+
+    // --- Start of New Validation Logic ---
+
+    // 1. Username (Email) validation
+    if (!username || !username.includes('@') || !username.includes('.')) {
+        return res.status(400).json({ error: 'El nombre de usuario debe ser un email válido (debe contener "@" y ".").' });
+    }
+
+    // 2. Password validation
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+        return res.status(400).json({ error: passwordError });
+    }
+
+    // --- End of New Validation Logic ---
+    
+    // Original logic proceeds only if validations pass
     const user = new User({ username, password }); 
     await user.save(); 
     res.status(201).json({ message: 'Usuario creado' }); 
