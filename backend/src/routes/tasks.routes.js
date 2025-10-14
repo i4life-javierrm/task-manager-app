@@ -20,11 +20,11 @@ router.get('/tasks', authMiddleware, async (req, res) => { // 👈 Apply middlew
 // Agregar una nueva tarea (Protected)
 router.post('/tasks', authMiddleware, async (req, res) => { // 👈 Apply middleware
     try {
-        const { title } = req.body;
+        const { title, description } = req.body;
         if (!title) return res.status(400).json({ error: "El título es obligatorio" });
 
         // SECURITY FIX: Assign the logged-in user's ID to the new task
-        const newTask = new Task({ title, user: req.userId });
+        const newTask = new Task({ title, description, user: req.userId });
         await newTask.save();
         res.status(201).json(newTask); // Use 201 for resource creation
     } catch (error) {
