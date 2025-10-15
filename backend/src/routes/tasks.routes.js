@@ -98,7 +98,9 @@ router.delete('/tasks/:id', authMiddleware, async (req, res) => { // 争 Appl
             return res.status(404).json({ message: "Tarea no encontrada o no autorizada" });
         }
         
-        res.json({ message: "Tarea eliminada" });
+        // 🚀 IMPROVEMENT: Use 204 No Content for successful deletion
+        res.status(204).send(); 
+        
     } catch (error) {
         console.error("Error deleting task:", error);
         res.status(500).json({ error: 'Error al eliminar la tarea' });
