@@ -19,6 +19,8 @@ module.exports = (req, res, next) => {
         const decoded = jwt.verify(token, SECRET_KEY);
         // Attach the userId to the request for use in route handlers
         req.userId = decoded.userId;
+        // 💥 ADMIN FIX: Attach isAdmin status to the request
+        req.isAdmin = decoded.isAdmin || false;
         next();
     } catch (error) {
         // If verification fails (e.g., expired or tampered)

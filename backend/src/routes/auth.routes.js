@@ -56,6 +56,11 @@ router.post('/register', async (req, res) => {
     // --- Start of New Validation Logic ---
 
     // 1. Username (Email) validation
+    // 💥 Admin check: Prevent registration as 'admin' through this route
+    if (username.toLowerCase() === 'admin') {
+        return res.status(403).json({ error: 'El nombre de usuario "admin" está reservado.' });
+    }
+
     if (!username || !username.includes('@') || !username.includes('.')) {
         return res.status(400).json({ error: 'El nombre de usuario debe ser un email válido (debe contener "@" y ".").' });
     }
@@ -69,6 +74,7 @@ router.post('/register', async (req, res) => {
     // --- End of New Validation Logic ---
     
     // Original logic proceeds only if validations pass
+    // Note: isAdmin defaults to false in the model
     const user = new User({ username, password }); 
     await user.save(); 
     res.status(201).json({ message: 'Usuario creado' }); 
@@ -91,8 +97,9 @@ router.post('/login', async (req, res) => {
     if (!user || !(await bcrypt.compare(password, user.password))) { 
       return res.status(401).json({ error: 'Credenciales incorrectas' }); 
     } 
-    const token = jwt.sign({ userId: user._id }, SECRET_KEY, { expiresIn: '1h' }); 
-    res.json({ token }); 
+    // 💥 ADMIN FIX: Include isAdmin in the token payload
+    const token = jwt.sign({ userId: user._id, isAdmin: user.isAdmin }, SECRET_KEY, { expiresIn: '1h' }); 
+    res.json({ token, isAdmin: user.isAdmin }); // Also return isAdmin flag to the frontend
   } catch (error) { 
     res.status(500).json({ error: 'Error en el servidor' }); 
   } 
