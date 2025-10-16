@@ -1,44 +1,40 @@
-require('dotenv').config({ path: './variables.env' }); 
-const express = require('express'); 
-const cors = require('cors'); 
+const express = require('express');
+const dotenv = require('dotenv');
+const cors = require('cors');
 const connectDB = require('./config/db');
-const User = require('./models/user.model'); // 💥 Import User model
-const bcrypt = require('bcryptjs'); // 💥 Import bcrypt
+const User = require('./models/user.model'); // 💥 Importar el modelo de usuario
+const bcrypt = require('bcryptjs'); // 💥 Importar bcrypt para la creación del admin
 
-const app = express(); 
-const PORT = process.env.PORT || 5000; 
- 
-app.use(cors()); 
-app.use(express.json()); // Permite recibir JSON en las solicitudes
+// Rutas
+const authRoutes = require('./routes/auth.routes');
+const taskRoutes = require('./routes/tasks.routes');
+const adminRoutes = require('./routes/admin.routes'); 
 
-// 💥 FUNCTION TO ENSURE ADMIN ACCOUNT EXISTS
+// Cargar variables de entorno
+dotenv.config({ path: './variables.env' }); 
+
+// 💥 FUNCIÓN PARA ASEGURAR QUE EL USUARIO ADMIN EXISTA
 const ensureAdminUser = async () => {
     try {
         const adminUsername = 'admin';
-        const adminPasswordRaw = 'admin'; // Raw password: 'admin'
+        const adminPasswordRaw = 'admin'; // Contraseña por defecto: 'admin'
 
-        // 1. Check if admin user already exists
+        // 1. Verificar si el usuario admin ya existe
         let adminUser = await User.findOne({ username: adminUsername });
 
         if (!adminUser) {
             console.log('Admin user not found. Creating new admin user...');
             
-            // 2. Hash the required password ('admin') manually
-            const saltRounds = parseInt(process.env.SALT_ROUNDS, 10);
-            const hashedPassword = await bcrypt.hash(adminPasswordRaw, saltRounds);
-
-            // 3. Create the user directly (bypassing the pre-save hook for this specific case 
-            //    since we already manually hashed it, or letting the hook run if we pass the raw one).
-            //    Since the UserSchema pre-save hook handles hashing, we will pass the raw password here.
+            // La pre-save hook en User.model.js se encargará de hashear la contraseña
             adminUser = new User({ 
                 username: adminUsername, 
-                password: adminPasswordRaw, // The pre-save hook will hash this
-                isAdmin: true // Mark as admin
+                password: adminPasswordRaw, 
+                isAdmin: true // Marcar como admin
             });
             await adminUser.save();
             console.log('Admin user created successfully with password: "admin"');
         } else {
-            // Ensure existing 'admin' user is marked as admin
+            // Asegurar que el usuario 'admin' existente esté marcado como administrador
             if (!adminUser.isAdmin) {
                 adminUser.isAdmin = true;
                 await adminUser.save();
@@ -48,28 +44,42 @@ const ensureAdminUser = async () => {
             }
         }
     } catch (error) {
+        // Un error común aquí es si el hash falla o si 'SALT_ROUNDS' no está definido
         console.error('Error ensuring admin user exists:', error.message);
     }
 }
 
 
+const app = express(); 
+const PORT = process.env.PORT || 5000; 
+
 // Conectar a MongoDB y luego configurar Admin
 connectDB().then(() => {
+    // Ejecutar la verificación del administrador después de conectar la DB
     ensureAdminUser();
 });
 
 
-// Importar rutas de tareas 
-const taskRoutes = require('./routes/tasks.routes'); 
-app.use('/api', taskRoutes);
+// Middleware
+// Permitir CORS
+app.use(cors({
+    origin: process.env.CLIENT_URL || 'http://localhost:8100', 
+    credentials: true
+}));
 
-const authRoutes = require('./routes/auth.routes')
-app.use('/api', authRoutes);
+// Body parser
+app.use(express.json()); 
 
-app.get('/', (req, res) => { 
-    res.send('¡Servidor funcionando!'); 
+// 🎯 Rutas de la API
+app.use('/api', authRoutes); 
+app.use('/api/tasks', taskRoutes); 
+app.use('/api/admin', adminRoutes); // Rutas de administración
+
+// Ruta de bienvenida simple
+app.get('/', (req, res) => {
+    res.send('API is running...');
 });
 
 app.listen(PORT, () => { 
-    console.log(`Servidor corriendo en http://localhost:${PORT}`); 
+    console.log(`Server running on port ${PORT}`);
 });
