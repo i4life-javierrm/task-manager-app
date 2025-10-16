@@ -1,4 +1,4 @@
-const User = require('../models/User'); // Asume que el modelo de Usuario está aquí
+const User = require('../models/user.model'); // Asume que el modelo de Usuario está aquí
 
 // @desc    Obtener todos los usuarios (solo Admin)
 // @route   GET /api/admin/users
