@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Task = require('../models/Task');
 const authMiddleware = require('../middleware/auth.middleware'); 
+const User = require('../models/user.model');
 
 // 1. Obtener todas las tareas (Ruta: /tasks)
 router.get('/tasks', authMiddleware, async (req, res) => { 
@@ -9,7 +10,7 @@ router.get('/tasks', authMiddleware, async (req, res) => {
         let findCriteria = { user: req.userId }; 
         const isAdminRequest = req.query.all === 'true';
 
-        // Usa req.isAdmin
+        // Si es administrador y solicita todas las tareas, elimina el filtro de usuario.
         if (req.isAdmin && isAdminRequest) { 
             findCriteria = {}; 
         }
@@ -26,13 +27,34 @@ router.get('/tasks', authMiddleware, async (req, res) => {
 });
 
 // 2. Agregar una nueva tarea (Ruta: /tasks)
+// ✨ MODIFICACIÓN: Permite a un admin asignar una tarea a otro usuario
 router.post('/tasks', authMiddleware, async (req, res) => { 
     try {
-        const { title, description } = req.body; 
+        const { title, description, userId } = req.body; // Capturamos el nuevo campo userId
         
         if (!title) return res.status(400).json({ error: "El título es obligatorio" });
 
-        const newTask = new Task({ title, description, user: req.userId }); 
+        let assignedUserId = req.userId; // Por defecto, se asigna al usuario que hace la petición
+        
+        // Lógica de asignación de administrador
+        // Si el usuario es administrador Y se proporciona un userId, se usa ese userId.
+        if (req.isAdmin && userId) {
+            // OPTIONAL: Podrías añadir aquí una comprobación de que el 'userId' existe en la DB.
+            assignedUserId = userId;
+        } else if (req.isAdmin && userId && req.userId === userId) {
+            // Si un admin intenta asignarse a sí mismo, se usa su propio ID
+            assignedUserId = req.userId;
+        } else if (req.isAdmin && userId && req.userId !== userId) {
+            // Si es admin y asigna a otro usuario
+            assignedUserId = userId;
+        }
+        // Nota: Si no es admin, 'assignedUserId' sigue siendo 'req.userId', lo cual es seguro.
+
+        const newTask = new Task({ 
+            title, 
+            description, 
+            user: assignedUserId // Usamos el ID de usuario determinado por la lógica anterior
+        }); 
         
         await newTask.save();
         await newTask.populate('user', 'username'); 
@@ -50,17 +72,12 @@ router.put('/tasks/:id', authMiddleware, async (req, res) => {
         const { id } = req.params;
         const { title, description, completed } = req.body; 
         
-        // El frontend solo debe enviar title, description y completed.
-        // El servidor calcula completedAt.
         const completedAt = completed ? new Date() : null;
 
         // Utilizamos el filtro de usuario para asegurar que solo el dueño pueda editar (seguridad)
         const task = await Task.findOneAndUpdate(
-            // Condición: Buscar por ID y asegurar que el dueño sea el usuario logueado
             { _id: id, user: req.userId }, 
-            // Datos a actualizar: Todos los campos
             { title, description, completed, completedAt }, 
-            // Opciones: Devolver el documento nuevo (`new: true`)
             { new: true } 
         )
         .populate('user', 'username');
@@ -81,7 +98,7 @@ router.delete('/tasks/:id', authMiddleware, async (req, res) => {
         
         let deleteCriteria = { _id: id, user: req.userId }; 
 
-        // Si es administrador, se elimina el filtro de usuario.
+        // Si es administrador, se elimina el filtro de usuario para permitirle borrar cualquier tarea.
         if (req.isAdmin) {
             deleteCriteria = { _id: id }; 
         }
