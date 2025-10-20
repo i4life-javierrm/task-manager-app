@@ -25,13 +25,13 @@ const ensureAdminUser = async () => {
             adminUser = new User({ 
                 username: adminUsername, 
                 password: adminPasswordRaw, 
-                isAdmin: true 
+                role: 'ADMIN' 
             });
             await adminUser.save();
             console.log('Admin user created successfully with password: "admin"');
         } else {
-            if (!adminUser.isAdmin) {
-                adminUser.isAdmin = true;
+            if (adminUser.role !=='ADMIN') {
+                adminUser.role = 'ADMIN';
                 await adminUser.save();
                 console.log('Existing admin user updated to isAdmin: true.');
             } else {

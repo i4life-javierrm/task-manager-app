@@ -7,7 +7,7 @@ const Task = require('../models/Task'); // Asegurar la importación del modelo T
 // Middleware para verificar que el usuario es administrador
 const checkAdmin = (req, res, next) => {
     // Verifica el flag isAdmin adjunto por authMiddleware
-    if (!req.isAdmin) {
+    if (req.userRole !== 'ADMIN') {
         return res.status(403).json({ error: 'Acceso denegado: Se requiere rol de administrador' });
     }
     next();
@@ -37,7 +37,7 @@ router.delete('/users/:id', authMiddleware, checkAdmin, async (req, res) => {
         }
         
         // Bloquear la eliminación de la cuenta admin 
-        if (userToDelete.isAdmin) {
+        if (userToDelete.role === 'ADMIN') {
              return res.status(403).json({ error: 'No se puede eliminar una cuenta de administrador.' });
         }
         

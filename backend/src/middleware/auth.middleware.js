@@ -1,29 +1,38 @@
+// File: auth.middleware.js (MODIFICADO)
 const jwt = require('jsonwebtoken');
-// SECURITY FIX: Get SECRET_KEY from environment variables
-const SECRET_KEY = process.env.JWT_SECRET || 'mi_secreto_fallback'; // Use fallback
+// 💡 NUEVO: Necesitas importar el modelo de usuario para buscar el rol
+const User = require('../models/user.model'); // <--- ASUME ESTA RUTA
+const SECRET_KEY = process.env.JWT_SECRET || 'mi_secreto_fallback'; 
 
-module.exports = (req, res, next) => {
-    // FIX: Correctly check for token format. The token is the second element.
+// 💡 CAMBIO CLAVE: La función debe ser 'async'
+module.exports = async (req, res, next) => { 
     const tokenHeader = req.headers.authorization;
     
-    // Check if the header exists and starts with 'Bearer '
     if (!tokenHeader || !tokenHeader.startsWith('Bearer ')) {
         return res.status(401).json({ error: 'Acceso denegado: No se proporcionó token' });
     }
     
-    // Extract the token part (after 'Bearer ')
     const token = tokenHeader.split(' ')[1];
     
     try {
-        // Verify the token
         const decoded = jwt.verify(token, SECRET_KEY);
-        // Attach the userId to the request for use in route handlers
+        
+        // 💡 PASO 1: Buscar el usuario para obtener su rol actual del DB
+        const user = await User.findById(decoded.userId).select('role');
+        
+        if (!user) {
+            return res.status(401).json({ error: 'Token inválido: Usuario no encontrado en DB.' });
+        }
+        
+        // PASO 2: Adjuntar datos al request
         req.userId = decoded.userId;
-        // 💥 ADMIN FIX: Attach isAdmin status to the request
-        req.isAdmin = decoded.isAdmin || false;
+        // 💥 NUEVO: Adjuntamos el rol como propiedad separada
+        req.userRole = user.role; 
+        // 💥 COMPATIBILIDAD: Derivamos el flag isAdmin del nuevo rol
+        req.isAdmin = (user.role === 'ADMIN'); 
+
         next();
     } catch (error) {
-        // If verification fails (e.g., expired or tampered)
         res.status(401).json({ error: 'Token inválido o expirado' });
     }
 };

@@ -98,8 +98,8 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Credenciales incorrectas' }); 
     } 
     // 💥 ADMIN FIX: Include isAdmin in the token payload
-    const token = jwt.sign({ userId: user._id, isAdmin: user.isAdmin }, SECRET_KEY, { expiresIn: '1h' }); 
-    res.json({ token, isAdmin: user.isAdmin }); // Also return isAdmin flag to the frontend
+    const token = jwt.sign({ userId: user._id }, SECRET_KEY, { expiresIn: '1h' }); 
+    res.json({ token, role: user.role }); // Also return isAdmin flag to the frontend
   } catch (error) { 
     res.status(500).json({ error: 'Error en el servidor' }); 
   } 
