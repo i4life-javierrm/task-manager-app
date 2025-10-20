@@ -30,29 +30,18 @@ router.get('/tasks', authMiddleware, async (req, res) => {
 // ✨ MODIFICACIÓN: Permite a un admin asignar una tarea a otro usuario
 router.post('/tasks', authMiddleware, async (req, res) => { 
     try {
-        const { title, description, userId } = req.body; // Capturamos el nuevo campo userId
+        const { title, description, tags } = req.body; // Capturamos el nuevo campo userId
         
         if (!title) return res.status(400).json({ error: "El título es obligatorio" });
 
-        let assignedUserId = req.userId; // Por defecto, se asigna al usuario que hace la petición
-        
-        // Lógica de asignación de administrador
-        // Si el usuario es administrador Y se proporciona un userId, se usa ese userId.
-        if (req.isAdmin && userId) {
-            // OPTIONAL: Podrías añadir aquí una comprobación de que el 'userId' existe en la DB.
-            assignedUserId = userId;
-        } else if (req.isAdmin && userId && req.userId === userId) {
-            // Si un admin intenta asignarse a sí mismo, se usa su propio ID
-            assignedUserId = req.userId;
-        } else if (req.isAdmin && userId && req.userId !== userId) {
-            // Si es admin y asigna a otro usuario
-            assignedUserId = userId;
-        }
-        // Nota: Si no es admin, 'assignedUserId' sigue siendo 'req.userId', lo cual es seguro.
+        const assignedUserId = req.isAdmin && req.body.userId
+            ? req.body.userId
+            : req.userId;
 
         const newTask = new Task({ 
             title, 
             description, 
+            tags: tags || [],
             user: assignedUserId // Usamos el ID de usuario determinado por la lógica anterior
         }); 
         
@@ -70,14 +59,14 @@ router.post('/tasks', authMiddleware, async (req, res) => {
 router.put('/tasks/:id', authMiddleware, async (req, res) => { 
     try {
         const { id } = req.params;
-        const { title, description, completed } = req.body; 
+        const { title, description, completed, tags } = req.body; 
         
         const completedAt = completed ? new Date() : null;
 
         // Utilizamos el filtro de usuario para asegurar que solo el dueño pueda editar (seguridad)
         const task = await Task.findOneAndUpdate(
             { _id: id, user: req.userId }, 
-            { title, description, completed, completedAt }, 
+            { title, description, completed, completedAt, tags: tags || [] }, 
             { new: true } 
         )
         .populate('user', 'username');
