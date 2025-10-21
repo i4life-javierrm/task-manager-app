@@ -7,6 +7,7 @@ const taskSchema = new mongoose.Schema({
     // CAMBIO CRÍTICO: 'user' a 'users' y ahora es un array de referencias
     users: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }], // Ahora es un array
     tags: [{type:String, lowercase:true}],
+    isTrashed: {type:Boolean,default:false,},
 }, { timestamps: true }); 
 
 const Task = mongoose.model('Task', taskSchema); 

@@ -3,22 +3,23 @@ const router = express.Router();
 const Task = require('../models/Task');
 const authMiddleware = require('../middleware/auth.middleware'); 
 const User = require('../models/user.model');
+const mongoose = require('mongoose'); // Necesario para la validación de ObjectId
 
-// 1. Obtener todas las tareas (Ruta: /tasks)
+// 1. Obtener todas las tareas ACTIVAS (Ruta: /tasks) - Modificada en el paso anterior
 router.get('/tasks', authMiddleware, async (req, res) => { 
     try {
-        // CAMBIO CRÍTICO: Buscar tareas donde el req.userId esté en el array 'users'
-        let findCriteria = { users: { $in: [req.userId] } }; // 🎯 El usuario debe ser parte del array de usuarios
+        let findCriteria = { 
+            users: { $in: [req.userId] }, 
+            isTrashed: false // 🗑️ Filtro: Solo tareas activas
+        }; 
 
         const isAdminRequest = req.query.all === 'true';
 
-        // Si es administrador y solicita todas las tareas, elimina el filtro de usuario.
         if (req.isAdmin && isAdminRequest) { 
-            findCriteria = {}; 
+            findCriteria = { isTrashed: false }; 
         }
 
         const tasks = await Task.find(findCriteria)
-            // CAMBIO CRÍTICO: Se popula 'users' en lugar de 'user'
             .populate('users', 'username') 
             .exec();
 
@@ -29,45 +30,34 @@ router.get('/tasks', authMiddleware, async (req, res) => {
     }
 });
 
-// 2. Agregar una nueva tarea (Ruta: /tasks)
-// ✨ MODIFICACIÓN: Permite asignar la tarea a un usuario o a varios usuarios (grupo)
+// 2. Agregar una nueva tarea (Ruta: /tasks) - Sin cambios
 router.post('/tasks', authMiddleware, async (req, res) => { 
     try {
-        // 💥 CAMBIO: Capturamos 'users' (array de IDs) en lugar de 'userId'
         const { title, description, tags, userIds } = req.body; 
         
         if (!title) return res.status(400).json({ error: "El título de la tarea es obligatorio" });
 
         let assignedUsers = [];
 
-        // 💡 LÓGICA DE ASIGNACIÓN GRUPAL (ADMIN vs USER)
         if (req.userRole === 'ADMIN' && userIds && Array.isArray(userIds)) {
-            // 1. Si es ADMIN y proporciona IDs: 
-            // Usar la lista exacta proporcionada. El admin PUEDE crear una tarea sin asignarse a sí mismo.
             assignedUsers = userIds.filter(id => mongoose.Types.ObjectId.isValid(id));
-            
-            // 🚨 Seguridad: Si el ADMIN envía un array vacío, forzamos la asignación a sí mismo
-            // para evitar tareas "huérfanas" que nadie pueda ver/tocar.
             if (assignedUsers.length === 0) {
                  assignedUsers = [req.userId];
             }
         } else {
-            // 2. Si es USER (o ADMIN pero NO proporcionó un array 'users'):
-            // La tarea siempre se asigna únicamente al creador por seguridad.
             assignedUsers = [req.userId];
         }
 
         const newTask = new Task({
             title,
             description,
-            // 💥 CAMBIO CRÍTICO: Asignamos el ARRAY al campo 'users' del modelo
             users: assignedUsers, 
             tags: tags || [],
+            isTrashed: false, // Aseguramos que las nuevas tareas no estén en la papelera
         });
         
         await newTask.save();
         
-        // 🚀 MEJORA: Popular los usuarios asignados para la respuesta (solo el ID y username)
         const taskResponse = await newTask.populate('users', 'username _id');
         
         res.status(201).json(taskResponse);
@@ -77,7 +67,7 @@ router.post('/tasks', authMiddleware, async (req, res) => {
     }
 });
 
-// 3. 🛠️ RUTA CRÍTICA (Ruta: /tasks/:id) - Edición y Toggle de completado
+// 3. Edición y Toggle de completado (Ruta: /tasks/:id) - Sin cambios
 router.put('/tasks/:id', authMiddleware, async (req, res) => { 
     try {
         const { id } = req.params;
@@ -85,16 +75,15 @@ router.put('/tasks/:id', authMiddleware, async (req, res) => {
         
         const completedAt = completed ? new Date() : null;
 
-        // CAMBIO CRÍTICO: El usuario debe ser uno de los asignados para editar la tarea.
+        // CRITERIO CRÍTICO DE BÚSQUEDA: Añadimos isTrashed: false para no editar tareas en la papelera
         const task = await Task.findOneAndUpdate(
-            { _id: id, users: { $in: [req.userId] } }, 
+            { _id: id, users: { $in: [req.userId] }, isTrashed: false }, 
             { title, description, completed, completedAt, tags: tags || [] }, 
             { new: true } 
         )
-        // CAMBIO CRÍTICO: Popula 'users'
         .populate('users', 'username');
 
-        if (!task) return res.status(404).json({ error: "Tarea no encontrada o no autorizada" });
+        if (!task) return res.status(404).json({ error: "Tarea no encontrada, no autorizada o ya está en la papelera" });
 
         res.json(task);
     } catch (error) {
@@ -103,62 +92,147 @@ router.put('/tasks/:id', authMiddleware, async (req, res) => {
     }
 });
 
-// 4. Eliminar una tarea (Ruta: /tasks/:id)
+// 4. 🗑️ SOFT DELETE (Mover a Papelera) (Ruta: /tasks/:id)
+// Esta ruta REEMPLAZA la antigua eliminación permanente (DELETE). 
 router.delete('/tasks/:id', authMiddleware, async (req, res) => { 
     try {
         const { id } = req.params;
         
-        // CAMBIO CRÍTICO: El usuario debe ser uno de los asignados para eliminar la tarea (si no es admin).
-        let deleteCriteria = { _id: id, users: { $in: [req.userId] } }; 
+        // ⚠️ Criterio de Búsqueda: Debe ser activa y el usuario debe estar asignado
+        let updateCriteria = { _id: id, users: { $in: [req.userId] }, isTrashed: false }; 
 
-        // Si es administrador, se elimina el filtro de usuario para permitirle borrar cualquier tarea.
+        // Si es administrador, se elimina el filtro de usuario para permitirle mover cualquier tarea.
         if (req.isAdmin) {
-            deleteCriteria = { _id: id }; 
+            updateCriteria = { _id: id, isTrashed: false }; 
+        }
+
+        const task = await Task.findOneAndUpdate(
+            updateCriteria,
+            { $set: { isTrashed: true } }, // 🎯 Establecer isTrashed a true
+            { new: true }
+        );
+
+        if (!task) {
+            return res.status(404).json({ error: "Tarea no encontrada, no autorizada o ya está en la papelera" });
+        }
+
+        res.status(200).json({ message: "Tarea enviada a la papelera correctamente." }); 
+    } catch (error) {
+        console.error('Error moving task to trash:', error);
+        res.status(500).json({ error: 'Error al enviar la tarea a la papelera' });
+    }
+});
+
+// 5. 🆕 RUTA DE LISTADO DE PAPELERA (Ruta: /tasks/trashed)
+router.get('/tasks/trashed', authMiddleware, async (req, res) => { 
+    try {
+        // Criterio base: Tareas en la papelera
+        let findCriteria = { 
+            users: { $in: [req.userId] }, 
+            isTrashed: true // 🎯 Filtro: Solo tareas en la papelera
+        }; 
+
+        // Si es administrador, puede ver todas las tareas en la papelera
+        if (req.isAdmin && req.query.all === 'true') { 
+            findCriteria = { isTrashed: true }; 
+        }
+
+        const tasks = await Task.find(findCriteria)
+            .populate('users', 'username') 
+            .exec();
+
+        res.json(tasks);
+    } catch (error) {
+        console.error('Error fetching trashed tasks:', error);
+        res.status(500).json({ error: 'Error al obtener tareas de la papelera.' });
+    }
+});
+
+// 6. 🆕 RUTA DE RESTAURACIÓN (Ruta: /tasks/:id/restore)
+router.put('/tasks/:id/restore', authMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // Criterio: Debe estar en la papelera y el usuario debe estar asignado
+        let updateCriteria = { _id: id, users: { $in: [req.userId] }, isTrashed: true }; 
+
+        if (req.isAdmin) {
+            updateCriteria = { _id: id, isTrashed: true }; 
+        }
+
+        const task = await Task.findOneAndUpdate(
+            updateCriteria,
+            { $set: { isTrashed: false } }, // 🎯 Restaurar: Establecer isTrashed a false
+            { new: true }
+        )
+        .populate('users', 'username');
+
+        if (!task) {
+            return res.status(404).json({ error: "Tarea no encontrada, no autorizada o ya está activa" });
+        }
+
+        res.json(task);
+    } catch (error) {
+        console.error('Error restoring task:', error);
+        res.status(500).json({ error: 'Error al restaurar la tarea' });
+    }
+});
+
+// 7. 🆕 RUTA DE ELIMINACIÓN PERMANENTE (Ruta: /tasks/:id/permanent)
+// Solo para tareas en la papelera.
+router.delete('/tasks/:id/permanent', authMiddleware, async (req, res) => { 
+    try {
+        const { id } = req.params;
+        
+        // Criterio: Debe estar en la papelera y el usuario debe estar asignado
+        let deleteCriteria = { _id: id, users: { $in: [req.userId] }, isTrashed: true }; 
+
+        // Si es administrador, se elimina el filtro de usuario.
+        if (req.isAdmin) {
+            deleteCriteria = { _id: id, isTrashed: true }; 
         }
 
         const result = await Task.deleteOne(deleteCriteria);
         
         if (result.deletedCount === 0) {
-            return res.status(404).json({ error: "Tarea no encontrada o no autorizada" });
+            return res.status(404).json({ error: "Tarea no encontrada, no autorizada o no está en la papelera" });
         }
 
-        res.status(204).send(); 
+        res.status(204).send(); // 204 No Content para eliminación exitosa
     } catch (error) {
-        console.error('Error deleting task:', error);
-        res.status(500).json({ error: 'Error al eliminar la tarea' });
+        console.error('Error permanently deleting task:', error);
+        res.status(500).json({ error: 'Error al eliminar la tarea permanentemente' });
     }
 });
 
-// 5. 🆕 RUTA CRÍTICA: Añadir/Eliminar Miembros del Equipo (Ruta: /tasks/:id/members)
+// 8. RUTA DE GESTIÓN DE MIEMBROS - Sin cambios, pero CRÍTICO: añadimos filtro isTrashed: false al buscar la tarea
 router.put('/tasks/:id/members', authMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
-        // Esperamos un array completo de IDs de usuario que deben ser los NUEVOS miembros.
         const { userIds } = req.body; 
 
         if (!Array.isArray(userIds) || userIds.length === 0) {
             return res.status(400).json({ error: "Debe proporcionar un array de IDs de usuario válido y no vacío." });
         }
 
-        // 🛡️ VERIFICACIÓN DE PERMISOS: El usuario logeado debe ser miembro de la tarea o un administrador.
-        const task = await Task.findOne({ _id: id });
+        // 🛡️ VERIFICACIÓN DE PERMISOS: Solo tareas ACTIVAS pueden modificar miembros.
+        const task = await Task.findOne({ _id: id, isTrashed: false });
         
         if (!task) {
-            return res.status(404).json({ error: "Tarea no encontrada." });
+            return res.status(404).json({ error: "Tarea no encontrada, o está en la papelera." });
         }
 
+        // [ Resto de la lógica de permisos y actualización... ]
         const isMember = task.users.some(userId => userId.equals(req.userId));
         
         if (!req.isAdmin && !isMember) {
             return res.status(403).json({ error: "Acceso denegado. Solo administradores o miembros de la tarea pueden modificar el equipo." });
         }
 
-        // 🛡️ VERIFICACIÓN DE VALIDEZ DE IDS: Aseguramos que todos los IDs existen.
-        const uniqueUserIds = [...new Set(userIds)]; // Eliminamos duplicados
+        const uniqueUserIds = [...new Set(userIds)];
         const existingUsers = await User.find({ _id: { $in: uniqueUserIds } });
         
         if (existingUsers.length !== uniqueUserIds.length) {
-            // Identificamos qué IDs fallaron para un mejor feedback (opcional)
             const existingIds = existingUsers.map(u => u._id.toString());
             const invalidIds = uniqueUserIds.filter(id => !existingIds.includes(id));
             return res.status(400).json({ 
@@ -167,13 +241,9 @@ router.put('/tasks/:id/members', authMiddleware, async (req, res) => {
             });
         }
         
-        // 💾 ACTUALIZACIÓN: Reemplazamos el array 'users' completo.
-        // Si quisieras solo añadir o solo quitar, la lógica Mongoose sería $addToSet o $pull.
-        // Pero para una gestión completa (reemplazo), es más fácil para el Front-end enviar el array final.
         task.users = uniqueUserIds;
         await task.save();
         
-        // Popula para devolver la tarea actualizada con los nombres de usuario
         await task.populate('users', 'username'); 
 
         res.json(task);
