@@ -49,14 +49,24 @@ router.delete('/users/:id', authMiddleware, checkAdmin, async (req, res) => {
         const result = await User.deleteOne({ _id: id });
 
         if (result.deletedCount === 0) {
-            // Este caso debería ser raro si lo encontramos con findById antes
             return res.status(404).json({ error: 'Usuario no encontrado para eliminar.' });
         }
 
-        // Eliminar todas las tareas asociadas a ese usuario eliminado
-        // Nota: Asegúrate de que Task se haya importado correctamente en este archivo
-        await Task.deleteMany({ user: id });
+        // 🚀 NUEVA LÓGICA DE ELIMINACIÓN DE TAREAS PARA GRUPOS 🚀
         
+        // PASO 1: Quitar al usuario del array 'users' en todas las tareas asignadas
+        const updateResult = await Task.updateMany(
+            { users: id }, // Criterio: La tarea contiene el ID del usuario en el array 'users'
+            { $pull: { users: id } } // Acción: Quita el ID del usuario del array
+        );
+
+        // PASO 2: Eliminar las tareas que se hayan quedado sin ningún usuario
+        // Esto cubre las tareas individuales que desaparecen si su único usuario es eliminado.
+        await Task.deleteMany({ 
+            users: { $size: 0 } // Criterio: La longitud del array 'users' es cero
+        });
+        
+        // El usuario ha sido eliminado, y sus tareas han sido reasignadas o eliminadas.
         res.status(204).send(); // 204 No Content
     } catch (error) {
         console.error('Error deleting user:', error);

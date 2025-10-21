@@ -4,8 +4,8 @@ const taskSchema = new mongoose.Schema({
     completed: { type: Boolean, default: false }, 
     description: { type: String, required: false }, // Campo de descripción
     completedAt: { type: Date, default: null }, // 🚀 CRITICAL FIX 1: Nuevo campo para la fecha de finalización
-    // SECURITY/FUNCTIONALITY FIX: Add reference to the User model
-    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    // CAMBIO CRÍTICO: 'user' a 'users' y ahora es un array de referencias
+    users: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }], // Ahora es un array
     tags: [{type:String, lowercase:true}],
 }, { timestamps: true }); 
 
