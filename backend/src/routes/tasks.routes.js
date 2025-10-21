@@ -33,42 +33,47 @@ router.get('/tasks', authMiddleware, async (req, res) => {
 // ✨ MODIFICACIÓN: Permite asignar la tarea a un usuario o a varios usuarios (grupo)
 router.post('/tasks', authMiddleware, async (req, res) => { 
     try {
-        // CAMBIO CRÍTICO: Ahora esperamos un array de 'userIds' opcionalmente.
+        // 💥 CAMBIO: Capturamos 'users' (array de IDs) en lugar de 'userId'
         const { title, description, tags, userIds } = req.body; 
         
-        if (!title) return res.status(400).json({ error: "El título es obligatorio" });
+        if (!title) return res.status(400).json({ error: "El título de la tarea es obligatorio" });
 
-        // Determinar el array de usuarios.
-        let assignedUserIds = [req.userId]; 
-        
-        if (req.isAdmin && Array.isArray(userIds) && userIds.length > 0) {
-             const uniqueIds = new Set([...userIds, req.userId]);
-             assignedUserIds = Array.from(uniqueIds);
+        let assignedUsers = [];
+
+        // 💡 LÓGICA DE ASIGNACIÓN GRUPAL (ADMIN vs USER)
+        if (req.userRole === 'ADMIN' && userIds && Array.isArray(userIds)) {
+            // 1. Si es ADMIN y proporciona IDs: 
+            // Usar la lista exacta proporcionada. El admin PUEDE crear una tarea sin asignarse a sí mismo.
+            assignedUsers = userIds.filter(id => mongoose.Types.ObjectId.isValid(id));
+            
+            // 🚨 Seguridad: Si el ADMIN envía un array vacío, forzamos la asignación a sí mismo
+            // para evitar tareas "huérfanas" que nadie pueda ver/tocar.
+            if (assignedUsers.length === 0) {
+                 assignedUsers = [req.userId];
+            }
+        } else {
+            // 2. Si es USER (o ADMIN pero NO proporcionó un array 'users'):
+            // La tarea siempre se asigna únicamente al creador por seguridad.
+            assignedUsers = [req.userId];
         }
-        
-        // Verificar que todos los IDs sean válidos antes de crear la tarea
-        const validUsers = await User.find({ _id: { $in: assignedUserIds } });
-        if (validUsers.length !== assignedUserIds.length) {
-            return res.status(400).json({ error: "Uno o más IDs de usuario no son válidos." });
-        }
 
-
-        const newTask = new Task({ 
-            title, 
-            description, 
+        const newTask = new Task({
+            title,
+            description,
+            // 💥 CAMBIO CRÍTICO: Asignamos el ARRAY al campo 'users' del modelo
+            users: assignedUsers, 
             tags: tags || [],
-            // CAMBIO CRÍTICO: Asignamos el array de IDs a 'users'
-            users: assignedUserIds 
-        }); 
+        });
         
         await newTask.save();
-        // CAMBIO CRÍTICO: Popula 'users' en lugar de 'user'
-        await newTask.populate('users', 'username'); 
         
-        res.status(201).json(newTask); 
+        // 🚀 MEJORA: Popular los usuarios asignados para la respuesta (solo el ID y username)
+        const taskResponse = await newTask.populate('users', 'username _id');
+        
+        res.status(201).json(taskResponse);
     } catch (error) {
         console.error('Error creating task:', error);
-        res.status(500).json({ error: 'Error al crear la tarea' });
+        res.status(500).json({ error: 'Error al crear la tarea.' });
     }
 });
 
