@@ -59,6 +59,9 @@ app.use('/api', authRoutes);
 const adminRoutes = require('./routes/admin.routes');
 app.use('/api', adminRoutes); 
 
+const notificationRoutes = require('./routes/notification.routes')
+app.use('/api', notificationRoutes)
+
 app.get('/', (req, res) => { 
     res.send('¡Servidor funcionando!'); 
 });
