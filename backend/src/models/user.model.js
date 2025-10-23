@@ -17,4 +17,14 @@ UserSchema.pre('save', async function (next) {
     next();
 });
 
+UserSchema.pre('findOneAndDelete',async function (next)
+{
+    const userToDelete = await this.model.findOne(this.getFilter()).select('_id')
+    if (userToDelete)
+    {
+        await Notification.deleteMany({userId: userToDelete._id})
+    }
+    next()
+})
+
 module.exports = mongoose.model('User', UserSchema);

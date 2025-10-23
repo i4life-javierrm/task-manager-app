@@ -1,4 +1,5 @@
 const mongoose = require('mongoose'); 
+
 const taskSchema = new mongoose.Schema({ 
     title: { type: String, required: true }, 
     completed: { type: Boolean, default: false }, 
@@ -9,6 +10,16 @@ const taskSchema = new mongoose.Schema({
     tags: [{type:String, lowercase:true}],
     isTrashed: {type:Boolean,default:false,},
 }, { timestamps: true }); 
+
+taskSchema.pre('findOneAndDelete', async function(next)
+{
+    const taskToDelete = await this.model.findOne(this.getFilter()).select('_id')
+    if (taskToDelete)
+    {
+        await Notification.deleteMany({taskId: taskToDelete._id})
+    }
+    next()
+})
 
 const Task = mongoose.model('Task', taskSchema); 
 module.exports = Task;
