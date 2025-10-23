@@ -1,6 +1,7 @@
 const express = require('express');
 const authMiddleware = require('../middleware/auth.middleware');
 const router = express.Router();
+const Notification = require('../models/notification.model')
 
 router.get('/notifications', authMiddleware, async (req, res) => {
     try {
@@ -36,7 +37,7 @@ router.post('/notifications',  authMiddleware, async (req,res) =>{
 
         await newNotification.save()
 
-        const notificationResponse = await newNotification
+        const notificationResponse = await Notification.findById(newNotification._id)
             .populate('user','username')
             .populate('task','title')
 

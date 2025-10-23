@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const Notification = require('./notification.model')
 
 const UserSchema = new mongoose.Schema({
     username: { type: String, required: true, unique: true },
@@ -22,7 +23,7 @@ UserSchema.pre('findOneAndDelete',async function (next)
     const userToDelete = await this.model.findOne(this.getFilter()).select('_id')
     if (userToDelete)
     {
-        await Notification.deleteMany({userId: userToDelete._id})
+        await Notification.deleteMany({user: userToDelete._id})
     }
     next()
 })

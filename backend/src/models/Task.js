@@ -1,4 +1,5 @@
 const mongoose = require('mongoose'); 
+const Notification = require('./notification.model')
 
 const taskSchema = new mongoose.Schema({ 
     title: { type: String, required: true }, 
@@ -16,7 +17,7 @@ taskSchema.pre('findOneAndDelete', async function(next)
     const taskToDelete = await this.model.findOne(this.getFilter()).select('_id')
     if (taskToDelete)
     {
-        await Notification.deleteMany({taskId: taskToDelete._id})
+        await Notification.deleteMany({task: taskToDelete._id})
     }
     next()
 })
