@@ -12,7 +12,7 @@ const taskSchema = new mongoose.Schema({
     isTrashed: {type:Boolean,default:false,},
 }, { timestamps: true }); 
 
-taskSchema.pre('findOneAndDelete', async function(next)
+taskSchema.pre('deleteOne', async function(next)
 {
     const taskToDelete = await this.model.findOne(this.getFilter()).select('_id')
     if (taskToDelete)

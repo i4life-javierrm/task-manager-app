@@ -20,7 +20,7 @@ router.get('/tasks', authMiddleware, async (req, res) => {
         }
 
         const tasks = await Task.find(findCriteria)
-            .populate('users', 'username') 
+            .populate('users', 'username role') 
             .exec();
 
         res.json(tasks);
@@ -58,7 +58,7 @@ router.post('/tasks', authMiddleware, async (req, res) => {
         
         await newTask.save();
         
-        const taskResponse = await newTask.populate('users', 'username _id');
+        const taskResponse = await newTask.populate('users', 'role username _id');
         
         res.status(201).json(taskResponse);
     } catch (error) {
@@ -81,7 +81,7 @@ router.put('/tasks/:id', authMiddleware, async (req, res) => {
             { title, description, completed, completedAt, tags: tags || [] }, 
             { new: true } 
         )
-        .populate('users', 'username');
+        .populate('users', 'username role');
 
         if (!task) return res.status(404).json({ error: "Tarea no encontrada, no autorizada o ya está en la papelera" });
 
@@ -138,7 +138,7 @@ router.get('/tasks/trashed', authMiddleware, async (req, res) => {
         }
 
         const tasks = await Task.find(findCriteria)
-            .populate('users', 'username') 
+            .populate('users', 'username role') 
             .exec();
 
         res.json(tasks);
@@ -165,7 +165,7 @@ router.put('/tasks/:id/restore', authMiddleware, async (req, res) => {
             { $set: { isTrashed: false } }, // 🎯 Restaurar: Establecer isTrashed a false
             { new: true }
         )
-        .populate('users', 'username');
+        .populate('users', 'username role');
 
         if (!task) {
             return res.status(404).json({ error: "Tarea no encontrada, no autorizada o ya está activa" });
@@ -244,7 +244,7 @@ router.put('/tasks/:id/members', authMiddleware, async (req, res) => {
         task.users = uniqueUserIds;
         await task.save();
         
-        await task.populate('users', 'username'); 
+        await task.populate('users', 'username role'); 
 
         res.json(task);
     } catch (error) {
